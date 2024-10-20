@@ -2,6 +2,7 @@
 using MyBlog.Entities;
 using MyBlog.DTOs;
 using MyBlog.Entities.DTOs;
+using MyBlog.Entities.Entities;
 
 namespace MyBlog.Mappings
 {
@@ -17,6 +18,8 @@ namespace MyBlog.Mappings
 
             // Login için DTO dönüşümü
             CreateMap<LoginDto, User>();
+            CreateMap<SatisCirosuKarti, SatisCirosuKartiDto>().ReverseMap();
+            CreateMap<AylaraGoreSatisDagilimi, AylaraGoreSatisDagilimiDto>().ReverseMap();
         }
     }
 }

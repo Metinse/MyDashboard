@@ -1,12 +1,19 @@
+using Dapper;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.Data.SqlClient;
+using AutoMapper;
+using MyBlog.Entities.DTOs;
+using MyBlog.Entities.Entities;
+using MyBlog.Mappings;
+using MyBlog.DataAccess.Repositories;
+using Microsoft.Extensions.Logging;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using System.Data;
-using Microsoft.Data.SqlClient;
-using MyBlog.DataAccess.Repositories;
 using FluentValidation;
 using FluentValidation.AspNetCore;
-using MyBlog.Business.Validators; // Validator sýnýflarýný dahil ediyoruz
+using MyBlog.Business.Validators;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -71,6 +78,12 @@ builder.Services.AddSwaggerGen(c =>
     // Swagger anotasyonlarýný etkinleþtir
     c.EnableAnnotations();
 });
+
+// Add AutoMapper to DI container
+builder.Services.AddAutoMapper(typeof(AutoMapperProfile));
+
+// Add logging
+builder.Services.AddLogging();
 
 var app = builder.Build();
 
