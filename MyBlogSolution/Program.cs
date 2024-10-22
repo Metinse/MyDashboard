@@ -1,31 +1,26 @@
-using Dapper;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.Data.SqlClient;
-using AutoMapper;
-using MyBlog.Entities.DTOs;
-using MyBlog.Entities.Entities;
-using MyBlog.Mappings;
-using MyBlog.DataAccess.Repositories;
-using Microsoft.Extensions.Logging;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using System.Data;
+using Microsoft.Data.SqlClient;
+using MyBlog.DataAccess.Repositories;
 using FluentValidation;
 using FluentValidation.AspNetCore;
 using MyBlog.Business.Validators;
+using Microsoft.OpenApi.Models;
+
 
 var builder = WebApplication.CreateBuilder(args);
 
-// appsettings.json dosyasýndaki JWT ayarlarýný alalým
+// JWT ayarlarý
 var jwtSettings = builder.Configuration.GetSection("Jwt");
-var key = Encoding.ASCII.GetBytes(jwtSettings["Key"]); // Gizli anahtar
+var key = Encoding.ASCII.GetBytes(jwtSettings["Key"]);
 
-// Veritabaný baðlantýsý için Connection String'i alalým
+// Veritabaný baðlantýsý
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
-builder.Services.AddTransient<IDbConnection>(db => new SqlConnection(connectionString)); // Veritabaný baðlantýsýný ekliyoruz
+builder.Services.AddTransient<IDbConnection>(db => new SqlConnection(connectionString));
 
-// JWT Authentication'ý konfigüre edelim
+// JWT Authentication konfigürasyonu
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -40,50 +35,77 @@ builder.Services.AddAuthentication(options =>
         ValidateIssuerSigningKey = true,
         IssuerSigningKey = new SymmetricSecurityKey(key),
         ValidateIssuer = true,
-        ValidIssuer = jwtSettings["Issuer"], // Issuer doðrulamasý
+        ValidIssuer = jwtSettings["Issuer"],
         ValidateAudience = true,
-        ValidAudience = jwtSettings["Audience"], // Audience doðrulamasý
+        ValidAudience = jwtSettings["Audience"],
         ValidateLifetime = true,
-        ClockSkew = TimeSpan.Zero // Token'ýn hemen süresinin dolmasý için tolerans süresi yok
+        ClockSkew = TimeSpan.Zero
     };
 });
 
-// Authorization Servisini ekleyelim
-builder.Services.AddAuthorization();  // Authorization servisini ekliyoruz
+builder.Services.AddAuthorization();
 
-// Swagger ve diðer servisleri ekleyin
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
-
-// Repository ve Dependency Injection ekleyelim
-builder.Services.AddScoped<IUserRepository, UserRepository>(); // IUserRepository ve UserRepository baðýmlýlýklarýný ekliyoruz
-
-// FluentValidation'ý burada ekliyoruz
+// FluentValidation ekliyoruz
 builder.Services.AddControllers()
     .AddFluentValidation(fv =>
-        fv.RegisterValidatorsFromAssemblyContaining<LoginValidator>());
+    {
+        fv.RegisterValidatorsFromAssemblyContaining<LoginValidator>();
+     
+    });
 
-// Controller'larý ekleyelim
-builder.Services.AddControllers();
+// CORS politikasýný ekliyoruz
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowAngularApp",
+        builder =>
+        {
+            builder.WithOrigins("http://localhost:4200") // Angular uygulamasý adresi
+                   .AllowAnyHeader()
+                   .AllowAnyMethod();
+        });
+});
 
-builder.Services.AddEndpointsApiExplorer();
+// Swagger ve diðer servisler
 builder.Services.AddSwaggerGen(c =>
 {
-    c.SwaggerDoc("v1", new Microsoft.OpenApi.Models.OpenApiInfo
+    c.SwaggerDoc("v1", new OpenApiInfo
     {
         Title = "My API",
         Version = "v1"
     });
 
-    // Swagger anotasyonlarýný etkinleþtir
+    c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    {
+        In = ParameterLocation.Header,
+        Description = "Lütfen 'Bearer {token}' formatýnda JWT token girin",
+        Name = "Authorization",
+        Type = SecuritySchemeType.ApiKey,
+        Scheme = "Bearer"
+    });
+
+    c.AddSecurityRequirement(new OpenApiSecurityRequirement
+    {
+        {
+            new OpenApiSecurityScheme
+            {
+                Reference = new OpenApiReference
+                {
+                    Type = ReferenceType.SecurityScheme,
+                    Id = "Bearer"
+                }
+            },
+            new string[] {}
+        }
+    });
+
     c.EnableAnnotations();
 });
 
-// Add AutoMapper to DI container
-builder.Services.AddAutoMapper(typeof(AutoMapperProfile));
+// Dependency Injection
+builder.Services.AddScoped<IUserRepository, UserRepository>();
 
-// Add logging
-builder.Services.AddLogging();
+
+builder.Services.AddAutoMapper(AppDomain.CurrentDomain.GetAssemblies());
 
 var app = builder.Build();
 
@@ -91,25 +113,31 @@ var app = builder.Build();
 if (app.Environment.IsDevelopment())
 {
     app.UseDeveloperExceptionPage();
-
-    // Swagger middleware'lerini ekleyelim
-    app.UseSwagger();
-    app.UseSwaggerUI(c =>
-    {
-        c.SwaggerEndpoint("/swagger/v1/swagger.json", "My Blog API V1");
-    });
+}
+else
+{
+    app.UseExceptionHandler("/Home/Error");
+    app.UseHsts();
 }
 
-app.UseHttpsRedirection();
+// CORS Middleware'ini ekliyoruz
+app.UseCors("AllowAngularApp");
 
+// Swagger Middleware
+app.UseSwagger();
+app.UseSwaggerUI(c =>
+{
+    c.SwaggerEndpoint("/swagger/v1/swagger.json", "My Blog API V1");
+});
+
+app.UseHttpsRedirection();
 app.UseRouting();
 
-// Hata yakalama middleware'i burada ekleniyor
 app.UseMiddleware<ErrorHandlerMiddleware>();
 
-app.UseAuthentication(); // JWT Authentication'ý etkinleþtirir
-app.UseAuthorization();  // Authorization'ý etkinleþtirir
+app.UseAuthentication();
+app.UseAuthorization();
 
-app.MapControllers(); // Controller'larý haritalar ve çalýþmasýný saðlar
+app.MapControllers();
 
 app.Run();
